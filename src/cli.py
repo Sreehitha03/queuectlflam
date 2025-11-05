@@ -1,4 +1,7 @@
 # src/cli.py 
+import multiprocessing
+import os # We'll use this to save PIDs
+from .worker import run_worker
 import click
 import json
 import uuid 
@@ -98,19 +101,83 @@ def worker():
     """Manages worker processes."""
     pass
 
+
+WORKER_PID_FILE = "queuectl_workers.pid" 
+
 @worker.command()
 @click.option('--count', default=1, help='Number of workers to start.', type=int)
 def start(count):
     """Starts one or more worker processes."""
-    click.echo(f"Starting {count} workers...")
+    if os.path.exists(WORKER_PID_FILE):
+        click.echo("Error: Workers appear to already be running. Stop them first.", err=True)
+        return
+
+    workers = []
+    stop_event = multiprocessing.Event()
+    
+    # Save PIDs to file for tracking and graceful shutdown
+    pids = []
+
+    for i in range(1, count + 1):
+        # Pass the stop_event to each worker process
+        worker_id = f"Worker-{i}"
+        p = multiprocessing.Process(target=run_worker, args=(worker_id, stop_event))
+        p.start()
+        workers.append(p)
+        pids.append(str(p.pid))
+    
+    # Write PIDs to file
+    with open(WORKER_PID_FILE, 'w') as f:
+        f.write("\n".join(pids))
+        
+    click.echo(f"✅ Started {len(workers)} worker(s). PIDs written to {WORKER_PID_FILE}")
+    
+    try:
+        # Wait for workers to finish (blocking)
+        for p in workers:
+            p.join()
+    except KeyboardInterrupt:
+        click.echo("\nReceived interrupt signal. Initiating graceful worker shutdown...")
+        stop_event.set()
+        # Wait for workers to cleanly exit their loop
+        for p in workers:
+            p.join(timeout=5)
+    
+    # Clean up PID file after all workers exit
+    if os.path.exists(WORKER_PID_FILE):
+        os.remove(WORKER_PID_FILE)
+    click.echo("All workers stopped.")
+
 
 @worker.command()
 def stop():
     """Stops running workers gracefully."""
-    click.echo("Stopping workers...")
+    if not os.path.exists(WORKER_PID_FILE):
+        click.echo("No active worker PID file found. Workers are likely not running.")
+        return
 
-# --- Remaining placeholder commands will be added in later steps ---
-# dlq, status, list
+    click.echo("Attempting graceful shutdown of workers...")
+    
+    try:
+        with open(WORKER_PID_FILE, 'r') as f:
+            pids = [int(p.strip()) for p in f.readlines() if p.strip()]
+    except Exception:
+        pids = []
 
-if __name__ == '__main__':
-    cli(obj={})
+    if pids:
+        import signal
+        for pid in pids:
+            try:
+                # Send SIGINT (Ctrl+C equivalent)
+                os.kill(pid, signal.SIGINT)
+                click.echo(f"Sent shutdown signal to PID {pid}.")
+            except ProcessLookupError:
+                click.echo(f"PID {pid} not found (already dead).", err=True)
+            except Exception as e:
+                 click.echo(f"Could not signal PID {pid}: {e}", err=True)
+
+    # Remove PID file immediately to prevent re-runs until workers are confirmed dead
+    if os.path.exists(WORKER_PID_FILE):
+        os.remove(WORKER_PID_FILE)
+        
+    click.echo("Worker shutdown signaled. Monitor the original terminal for completion.")
