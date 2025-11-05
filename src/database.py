@@ -1,7 +1,7 @@
-# src/database.py
 import sqlite3
 import os
 from datetime import datetime
+import click
 
 # Path to the SQLite database file
 # It will be created in the project root directory
@@ -87,3 +87,52 @@ def set_config(key, value):
     """, (key, value))
     conn.commit()
     conn.close()
+
+def insert_job(job_data):
+    """
+    Inserts a new job into the database.
+    
+    :param job_data: A dictionary containing 'id', 'command', and optional 'max_retries'.
+    :return: True on success, False on failure (e.g., duplicate ID).
+    """
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Retrieve configuration defaults
+    try:
+        default_max_retries = int(get_config('max_retries'))
+    except Exception:
+        default_max_retries = 3
+
+    # Prepare the data
+    now = datetime.utcnow().isoformat()
+    job_record = {
+        "id": job_data["id"],
+        "command": job_data["command"],
+        "state": "pending",
+        "attempts": 0,
+        "max_retries": int(job_data.get("max_retries", default_max_retries)),
+        "created_at": now,
+        "updated_at": now,
+        "next_run_at": None,
+        "error_message": None
+    }
+    
+    try:
+        cursor.execute("""
+            INSERT INTO jobs 
+            (id, command, state, attempts, max_retries, created_at, updated_at, next_run_at, error_message) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            job_record["id"], job_record["command"], job_record["state"], 
+            job_record["attempts"], job_record["max_retries"], job_record["created_at"], 
+            job_record["updated_at"], job_record["next_run_at"], job_record["error_message"]
+        ))
+        conn.commit()
+        return True
+    except sqlite3.IntegrityError:
+        # Handles duplicate job ID gracefully
+        click.echo(f"Error: Job ID '{job_record['id']}' already exists.", err=True)
+        return False
+    finally:
+        conn.close()
