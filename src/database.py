@@ -136,3 +136,45 @@ def insert_job(job_data):
         return False
     finally:
         conn.close()
+
+def update_job_state(job_id, state, attempts=None, updated_at=None, next_run_at=None, error_message=None):
+    """Updates a job's state and optional related fields."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Start building the SQL command
+    sql_parts = ["state = ?", "updated_at = ?"]
+    params = [state, updated_at or datetime.utcnow().isoformat()]
+
+    if attempts is not None:
+        sql_parts.append("attempts = ?")
+        params.append(attempts)
+        
+    # next_run_at can be NULL, so we handle None/NULL explicitly
+    if next_run_at is not None:
+        sql_parts.append("next_run_at = ?")
+        params.append(next_run_at)
+    else: # Allows explicitly clearing next_run_at (e.g., after success or manual retry)
+        sql_parts.append("next_run_at = NULL")
+
+    if error_message is not None:
+        sql_parts.append("error_message = ?")
+        params.append(error_message)
+    else:
+        # Clear error message on state change if not provided (e.g., transition to completed)
+        sql_parts.append("error_message = NULL")
+    
+    # Finalize SQL and parameters
+    sql = f"UPDATE jobs SET {', '.join(sql_parts)} WHERE id = ?"
+    params.append(job_id)
+
+    try:
+        cursor.execute(sql, tuple(params))
+        conn.commit()
+        return cursor.rowcount > 0
+    except sqlite3.Error as e:
+        print(f"Database error during state update for {job_id}: {e}")
+        conn.rollback()
+        return False
+    finally:
+        conn.close()
