@@ -6,6 +6,7 @@ import os
 import signal
 import multiprocessing
 from datetime import datetime
+import sys
 
 # Import worker function and DB utilities
 from .worker import run_worker
@@ -36,16 +37,34 @@ def cli(ctx):
 # ----------------- 2. Enqueue Command Implementation -----------------
 
 @cli.command()
-@click.argument('job_json')
+@click.argument('job_json', required=False) # MAKE ARGUMENT OPTIONAL
 def enqueue(job_json):
     """
     Adds a new job to the queue.
     Example: queuectl enqueue '{"id":"job1","command":"sleep 2"}'
+    Example (Robust): echo '{"id":"j1","command":"sleep 2"}' | python -m src.cli enqueue
     """
+    if not job_json:
+        # If no argument is provided, read from STDIN (piped input)
+        try:
+            job_json = sys.stdin.read().strip()
+        except:
+            click.echo("Error: No job data provided via argument or STDIN.", err=True)
+            return
+
+    # --- Start of existing logic ---
     try:
+        # Robust stripping logic
+        job_json = job_json.strip().strip("'").strip('"') 
+        
+        # Check if the stripped string is empty before attempting loads
+        if not job_json:
+             click.echo("Error: Empty job data provided.", err=True)
+             return
+
         job_data = json.loads(job_json)
     except json.JSONDecodeError:
-        click.echo("Error: Invalid JSON format provided.", err=True)
+        click.echo("Error: Invalid JSON format provided. (Ensure inner double quotes are used)", err=True)
         return
 
     # Basic Validation
