@@ -1,10 +1,18 @@
-# src/cli.py
+# src/cli.py (Corrected for Step 2)
 import click
+from .database import init_db # Import the database initialization function
 
+# ----------------------------------------------------
+# 1. Main CLI Group (MUST BE DEFINED ONLY ONCE)
+# ----------------------------------------------------
 @click.group()
-def cli():
+@click.pass_context 
+def cli(ctx):
     """QueueCTL: A CLI-based background job queue system."""
-    pass
+    # Initialize the database on every command call (Crucial for persistence)
+    init_db()
+    # Ensure ctx.obj is a dict for sharing data (best practice)
+    ctx.ensure_object(dict)
 
 # --- Command Imports will go here later ---
 
@@ -38,4 +46,5 @@ def stop():
 # --- Other commands (status, list, dlq, config) will go here later ---
 
 if __name__ == '__main__':
-    cli()
+    # Pass the context object when calling the cli group directly
+    cli(obj={})
