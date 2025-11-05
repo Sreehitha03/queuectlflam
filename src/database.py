@@ -178,3 +178,50 @@ def update_job_state(job_id, state, attempts=None, updated_at=None, next_run_at=
         return False
     finally:
         conn.close()
+        
+def get_job_status_summary():
+    """Retrieves the count of jobs for every state."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT state, COUNT(id) FROM jobs GROUP BY state")
+    summary = {row['state']: row['COUNT(id)'] for row in cursor.fetchall()}
+    conn.close()
+    return summary
+
+def get_jobs_by_state(state):
+    """Retrieves a list of jobs matching a specific state."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT 
+            id, command, state, attempts, max_retries, updated_at, next_run_at 
+        FROM jobs 
+        WHERE state = ? 
+        ORDER BY updated_at DESC
+    """, (state,))
+    jobs = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return jobs
+
+def retry_dlq_job(job_id):
+    """Resets a 'dead' job to 'pending' state for re-processing."""
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now = datetime.utcnow().isoformat()
+    
+    # Reset attempts, next_run_at, and error_message
+    cursor.execute("""
+        UPDATE jobs 
+        SET 
+            state = 'pending', 
+            attempts = 0, 
+            updated_at = ?,
+            next_run_at = NULL, 
+            error_message = NULL
+        WHERE id = ? AND state = 'dead'
+    """, (now, job_id))
+    
+    row_count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return row_count > 0

@@ -1,26 +1,39 @@
 # src/cli.py 
-import multiprocessing
-import os # We'll use this to save PIDs
-from .worker import run_worker
 import click
 import json
 import uuid 
-# Import the new functions
-from .database import init_db, insert_job, set_config, get_all_configs
+import os
+import signal
+import multiprocessing
+from datetime import datetime
 
-# ----------------------------------------------------
-# 1. Main CLI Group (MUST BE DEFINED ONLY ONCE)
-# ----------------------------------------------------
+# Import worker function and DB utilities
+from .worker import run_worker
+from .database import (
+    init_db, 
+    insert_job, 
+    set_config, 
+    get_all_configs, 
+    get_job_status_summary,  
+    get_jobs_by_state,       
+    retry_dlq_job            
+)
+
+# File used to track active worker processes
+WORKER_PID_FILE = "queuectl_workers.pid" 
+
+# -------------------
+# 1. Main CLI Group
+# -------------------
 @click.group()
 @click.pass_context 
 def cli(ctx):
     """QueueCTL: A CLI-based background job queue system."""
-    # Initialize the database on every command call (Crucial for persistence)
+    # Initialize the database on every command call
     init_db()
-    # Ensure ctx.obj is a dict for sharing data (best practice)
     ctx.ensure_object(dict)
 
-# ----------------- 1. Enqueue Command Implementation -----------------
+# ----------------- 2. Enqueue Command Implementation -----------------
 
 @cli.command()
 @click.argument('job_json')
@@ -41,7 +54,6 @@ def enqueue(job_json):
         return
         
     if 'id' not in job_data:
-        # Assign a UUID if no ID is provided (Assumption/Trade-off)
         job_data['id'] = str(uuid.uuid4())
         click.echo(f"Warning: No job ID provided, assigned ID: {job_data['id']}", err=True)
         
@@ -52,7 +64,7 @@ def enqueue(job_json):
         pass
 
 
-# ----------------- 2. Config Command Implementation -----------------
+# ----------------- 3. Config Command Implementation -----------------
 
 @cli.group()
 def config():
@@ -63,11 +75,8 @@ def config():
 @click.argument('key')
 @click.argument('value')
 def set(key, value):
-    """Sets a configuration key-value pair (e.g., max_retries 5)."""
-    # Allowed configuration keys
+    """Sets a configuration key-value pair (e.g., max-retries 5)."""
     allowed_keys = ['max_retries', 'backoff_base']
-    
-    # Normalize key input (allows user to use max-retries or max_retries)
     key = key.replace('-', '_') 
 
     if key not in allowed_keys:
@@ -75,7 +84,6 @@ def set(key, value):
         return
 
     try:
-        # Validate that values are integers (since config values are numerical)
         int(value) 
     except ValueError:
         click.echo(f"Error: Value for key '{key}' must be an integer.", err=True)
@@ -89,20 +97,17 @@ def show():
     """Shows the current system configuration."""
     configs = get_all_configs()
     click.echo("\n--- Current QueueCTL Configuration ---")
-    # Clean, formatted output
     for k, v in configs.items():
         click.echo(f"{k.ljust(15)}: {v}")
     click.echo("-------------------------------------\n")
 
 
-# ----------------- 3. Worker Command Group (Keep placeholders) -----------------
+# ----------------- 4. Worker Management Implementation -----------------
+
 @cli.group()
 def worker():
     """Manages worker processes."""
     pass
-
-
-WORKER_PID_FILE = "queuectl_workers.pid" 
 
 @worker.command()
 @click.option('--count', default=1, help='Number of workers to start.', type=int)
@@ -114,36 +119,29 @@ def start(count):
 
     workers = []
     stop_event = multiprocessing.Event()
-    
-    # Save PIDs to file for tracking and graceful shutdown
     pids = []
 
     for i in range(1, count + 1):
-        # Pass the stop_event to each worker process
         worker_id = f"Worker-{i}"
         p = multiprocessing.Process(target=run_worker, args=(worker_id, stop_event))
         p.start()
         workers.append(p)
         pids.append(str(p.pid))
     
-    # Write PIDs to file
     with open(WORKER_PID_FILE, 'w') as f:
         f.write("\n".join(pids))
         
     click.echo(f"✅ Started {len(workers)} worker(s). PIDs written to {WORKER_PID_FILE}")
     
     try:
-        # Wait for workers to finish (blocking)
         for p in workers:
             p.join()
     except KeyboardInterrupt:
         click.echo("\nReceived interrupt signal. Initiating graceful worker shutdown...")
         stop_event.set()
-        # Wait for workers to cleanly exit their loop
         for p in workers:
             p.join(timeout=5)
     
-    # Clean up PID file after all workers exit
     if os.path.exists(WORKER_PID_FILE):
         os.remove(WORKER_PID_FILE)
     click.echo("All workers stopped.")
@@ -165,10 +163,9 @@ def stop():
         pids = []
 
     if pids:
-        import signal
+        # Note: Sending SIGINT works on most Unix/Windows systems for process termination.
         for pid in pids:
             try:
-                # Send SIGINT (Ctrl+C equivalent)
                 os.kill(pid, signal.SIGINT)
                 click.echo(f"Sent shutdown signal to PID {pid}.")
             except ProcessLookupError:
@@ -176,8 +173,91 @@ def stop():
             except Exception as e:
                  click.echo(f"Could not signal PID {pid}: {e}", err=True)
 
-    # Remove PID file immediately to prevent re-runs until workers are confirmed dead
     if os.path.exists(WORKER_PID_FILE):
         os.remove(WORKER_PID_FILE)
         
-    click.echo("Worker shutdown signaled. Monitor the original terminal for completion.")
+    click.echo("Worker shutdown signaled. Monitor the original terminal for completion.") 
+
+# ----------------- 5. Status Command Implementation -----------------
+
+@cli.command()
+def status():
+    """Show summary of all job states & active workers."""
+    summary = get_job_status_summary()
+    
+    active_workers = 0
+    if os.path.exists(WORKER_PID_FILE):
+        try:
+            with open(WORKER_PID_FILE, 'r') as f:
+                active_workers = len([p.strip() for p in f.readlines() if p.strip()])
+        except Exception:
+            pass 
+
+    click.echo("\n--- QueueCTL System Status ---")
+    click.echo(f"Active Workers: {active_workers}\n")
+    
+    states = ['pending', 'processing', 'completed', 'failed', 'dead']
+    total_jobs = 0
+
+    click.echo("--- Job Summary ---")
+    for state in states:
+        count = summary.get(state, 0)
+        click.echo(f"{state.ljust(12)}: {count}")
+        total_jobs += count
+        
+    click.echo("-" * 21)
+    click.echo(f"{'TOTAL'.ljust(12)}: {total_jobs}")
+    click.echo("---------------------------\n")
+
+
+# ----------------- 6. List Jobs Command Implementation -----------------
+
+@cli.command()
+@click.option('--state', default='pending', help='State to filter jobs by.', type=str)
+def list(state):
+    """List jobs by state (pending, processing, completed, dead, etc.)."""
+    jobs = get_jobs_by_state(state)
+    
+    click.echo(f"\n--- Jobs in '{state.upper()}' State ({len(jobs)} total) ---")
+    
+    if not jobs:
+        click.echo("No jobs found in this state.")
+        return
+
+    click.echo(f"{'ID'.ljust(38)} | {'ATT/MAX'.ljust(9)} | {'UPDATED AT'.ljust(20)} | COMMAND")
+    click.echo("-" * 100)
+
+    for job in jobs:
+        attempts_str = f"{job['attempts']}/{job['max_retries']}"
+        updated_dt = datetime.fromisoformat(job['updated_at']).strftime('%Y-%m-%d %H:%M:%S')
+        command_short = (job['command'][:40] + '...') if len(job['command']) > 40 else job['command']
+        
+        click.echo(f"{job['id'].ljust(38)} | {attempts_str.ljust(9)} | {updated_dt.ljust(20)} | {command_short}")
+    
+    click.echo("-" * 100)
+
+
+# ----------------- 7. DLQ Command Group Implementation -----------------
+
+@cli.group()
+def dlq():
+    """Manages the Dead Letter Queue (DLQ)."""
+    pass
+
+@dlq.command(name='list') 
+def dlq_list():
+    """View jobs in the Dead Letter Queue."""
+    # Call the list command with the 'dead' state filter
+    list(state='dead')
+
+@dlq.command()
+@click.argument('job_id')
+def retry(job_id):
+    """Retries a permanently failed job from the DLQ."""
+    if retry_dlq_job(job_id):
+        click.echo(f"✅ Job {job_id} successfully moved to PENDING for retry (attempts reset).")
+    else:
+        click.echo(f"❌ Error: Job {job_id} not found in DLQ or is not in 'dead' state.", err=True)
+
+if __name__ == '__main__':
+    cli(obj={}) 
