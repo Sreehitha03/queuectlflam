@@ -28,7 +28,7 @@ It reliably executes background shell commands using **concurrent workers**, **a
 | **Concurrency Safety**      | ✅ Fixed    | Atomic acquisition + race condition mitigation |
 | **Input Robustness**        | ✅ Fixed    | Jobs enqueued through **STDIN** for safe JSON handling |
  
-🎥 **Demo Video:** _[Add your video demo link here]_  
+🎥  **Video Demo Link:** [View Demo Video](https://drive.google.com/file/d/1huW0wRjFC_dvsFFn7y9nrENpJf1_BrQp/view?usp=sharing)_  
 
 ---
 
