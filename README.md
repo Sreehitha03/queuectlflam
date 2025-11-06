@@ -85,10 +85,11 @@ The worker fetches the pending job, executes it, and marks it as completed in th
 
 Commands:
 
-Terminal	Command
-CMD B	echo '{"id":"S1-success","command":"echo Success in Parallel"}' | python -m src.cli enqueue
-CMD A	python -m src.cli worker start --count 1
-CMD B	python -m src.cli status
+| Terminal | Step Description | Command |
+|---|---|---|
+| **CMD B** | Enqueue Job | `echo '{"id":"S1-success","command":"echo Success in Parallel"}' \| python -m src.cli enqueue` |
+| **CMD A** | Start Worker | `python -m src.cli worker start --count 1` |
+| **CMD B** | Verify Status | `python -m src.cli status` |
 
 Expected Output:
 
@@ -108,13 +109,14 @@ After exhausting retries, the job moves to the Dead Letter Queue (DLQ).
 
 Commands:
 
-Terminal	Command
-CMD B	python -m src.cli config set max-retries 1
-CMD B	python -m src.cli config set back-off-base 3
-CMD B	echo '{"id":"S2-fail","command":"exit 1"}' | python -m src.cli enqueue
-CMD A	python -m src.cli worker start --count 1
-CMD B	python -m src.cli dlq list
-CMD B	python -m src.cli dlq retry S2-fail
+| Terminal | Step Description | Command |
+|---|---|---|
+| **CMD B** | Set Max Retries | `python -m src.cli config set max-retries 1` |
+| **CMD B** | Set Backoff Base | `python -m src.cli config set back-off-base 3` |
+| **CMD B** | Enqueue Failing Job | `echo '{"id":"S2-fail","command":"exit 1"}' \| python -m src.cli enqueue` |
+| **CMD A** | Start Worker | `python -m src.cli worker start --count 1` |
+| **CMD B** | Verify DLQ Status | `python -m src.cli dlq list` |
+| **CMD B** | Retry DLQ Job | `python -m src.cli dlq retry S2-fail` |
 
 Expected Output:
 
@@ -133,13 +135,11 @@ Explanation:
 Two long-running jobs (ping commands) are enqueued.
 Two worker processes execute them in parallel, ensuring no overlap or race condition occurs.
 
-Commands:
-
-Terminal	Command
-CMD B	echo '{"id":"S3-A","command":"ping -n 7 127.0.0.1 > NUL"}' | python -m src.cli enqueue
-CMD B	echo '{"id":"S3-B","command":"ping -n 7 127.0.0.1 > NUL"}' | python -m src.cli enqueue
-CMD A	python -m src.cli worker start --count 2
-CMD B	python -m src.cli status
+| Terminal | Step Description | Command |
+|---|---|---|
+| **CMD B** | Enqueue Job | `echo '{"id":"S1-success","command":"echo Success in Parallel"}' \| python -m src.cli enqueue` |
+| **CMD A** | Start Worker (Blocking) | `python -m src.cli worker start --count 1` |
+| **CMD B** | Verify Final Status | `python -m src.cli status` |
 
 Expected Output:
 
