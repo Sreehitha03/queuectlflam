@@ -232,8 +232,9 @@ def status():
 # ----------------- 6. List Jobs Command Implementation -----------------
 
 @cli.command()
+@click.pass_context # MUST add context to use ctx.forward/invoke later
 @click.option('--state', default='pending', help='State to filter jobs by.', type=str)
-def list(state):
+def list(ctx, state): # MUST accept ctx as the first argument
     """List jobs by state (pending, processing, completed, dead, etc.)."""
     jobs = get_jobs_by_state(state)
     
@@ -243,18 +244,24 @@ def list(state):
         click.echo("No jobs found in this state.")
         return
 
+    # Simple table-like output for readability
     click.echo(f"{'ID'.ljust(38)} | {'ATT/MAX'.ljust(9)} | {'UPDATED AT'.ljust(20)} | COMMAND")
     click.echo("-" * 100)
 
     for job in jobs:
+        # NOTE: Ensure updated_at is properly handled as datetime object for formatting
         attempts_str = f"{job['attempts']}/{job['max_retries']}"
-        updated_dt = datetime.fromisoformat(job['updated_at']).strftime('%Y-%m-%d %H:%M:%S')
+        # We need to explicitly convert from ISO string to datetime object for strftime
+        try:
+             updated_dt = datetime.fromisoformat(job['updated_at']).strftime('%Y-%m-%d %H:%M:%S')
+        except ValueError:
+             updated_dt = job['updated_at'] # Fallback if format is wrong
+
         command_short = (job['command'][:40] + '...') if len(job['command']) > 40 else job['command']
         
         click.echo(f"{job['id'].ljust(38)} | {attempts_str.ljust(9)} | {updated_dt.ljust(20)} | {command_short}")
     
     click.echo("-" * 100)
-
 
 # ----------------- 7. DLQ Command Group Implementation -----------------
 
@@ -263,11 +270,14 @@ def dlq():
     """Manages the Dead Letter Queue (DLQ)."""
     pass
 
-@dlq.command(name='list') 
-def dlq_list():
+@dlq.command(name='list') # Need to name it 'list' as it's a sub-command
+@click.pass_context # MUST add context here
+def dlq_list(ctx): # MUST accept ctx as the argument
     """View jobs in the Dead Letter Queue."""
-    # Call the list command with the 'dead' state filter
-    list(state='dead')
+    # Correct way to invoke one command from another:
+    # ctx.invoke calls the function directly; ctx.forward calls the command group process.
+    # Since 'list' takes an option/argument, we use invoke.
+    ctx.invoke(list, state='dead') # Use the function name (list) and pass kwargs
 
 @dlq.command()
 @click.argument('job_id')
@@ -277,6 +287,5 @@ def retry(job_id):
         click.echo(f"✅ Job {job_id} successfully moved to PENDING for retry (attempts reset).")
     else:
         click.echo(f"❌ Error: Job {job_id} not found in DLQ or is not in 'dead' state.", err=True)
-
 if __name__ == '__main__':
     cli(obj={}) 
