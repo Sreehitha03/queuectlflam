@@ -115,6 +115,7 @@ def run_worker(worker_id, stop_event):
                                          error_message=error_msg)
                         
                         print(f"[{worker_id}] ⚠️ Job {job_id} failed. Retrying in {delay}s at {next_run_at.strftime('%H:%M:%S UTC')}")
+                    time.sleep(0.05)
                         
             except subprocess.TimeoutExpired:
                 # Bonus Feature: Timeout handling (Good for robustness)
