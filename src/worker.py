@@ -2,7 +2,7 @@ import sqlite3
 import time
 import subprocess
 from datetime import datetime, timedelta
-# Import the update function from database.py
+
 from .database import get_db_connection, update_job_state, get_config
 
 def acquire_job_atomically():
@@ -11,7 +11,7 @@ def acquire_job_atomically():
     This prevents multiple workers from processing the same job.
     """
     conn = get_db_connection()
-    # Use EXCLUSIVE mode to prevent race conditions during the SELECT/UPDATE cycle
+    # Using EXCLUSIVE mode to prevent race conditions during the SELECT/UPDATE cycle
     conn.isolation_level = 'EXCLUSIVE' 
     cursor = conn.cursor()
     job = None
@@ -77,15 +77,12 @@ def run_worker(worker_id, stop_event):
         if job:
             job_id = job['id']
             command = job['command']
-            attempts = job['attempts'] + 1  # Increment attempt count
+            attempts = job['attempts'] + 1  
             max_retries = job['max_retries']
             
             print(f"[{worker_id}] Processing Job {job_id} (Attempt {attempts}/{max_retries}) - Command: {command}")
 
             try:
-                # Execute the command
-                # Use shell=True for convenience, though generally subprocess.run 
-                # with list of arguments is safer in production code.
                 result = subprocess.run(command, shell=True, check=False, 
                                         capture_output=True, text=True, timeout=30) 
                 
@@ -118,19 +115,17 @@ def run_worker(worker_id, stop_event):
                     time.sleep(0.05)
                         
             except subprocess.TimeoutExpired:
-                # Bonus Feature: Timeout handling (Good for robustness)
+                # Timeout handling (Good for robustness)
                 error_msg = "Job execution timed out after 30 seconds."
                 update_job_state(job_id, 'pending', attempts=attempts, error_message=error_msg)
                 print(f"[{worker_id}] ⏳ Job {job_id} timed out. Resetting to pending.")
             
             except Exception as e:
-                # General error during execution/db update
                 error_msg = f"Worker internal error: {e}"
                 print(f"[{worker_id}] 🚨 Worker internal error for Job {job_id}: {e}")
                 update_job_state(job_id, 'pending', attempts=job['attempts'], error_message=error_msg) 
             
         else:
-            # No job found, sleep briefly to avoid high CPU usage
             time.sleep(1)
 
     print(f"[{worker_id}] Worker received stop signal. Shutting down gracefully.")

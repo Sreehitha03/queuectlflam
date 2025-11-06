@@ -1,4 +1,3 @@
-# src/cli.py 
 import click
 import json
 import uuid 
@@ -23,9 +22,7 @@ from .database import (
 # File used to track active worker processes
 WORKER_PID_FILE = "queuectl_workers.pid" 
 
-# -------------------
-# 1. Main CLI Group
-# -------------------
+# ------------------ 1. Main CLI group ----------------------------
 @click.group()
 @click.pass_context 
 def cli(ctx):
@@ -37,7 +34,7 @@ def cli(ctx):
 # ----------------- 2. Enqueue Command Implementation -----------------
 
 @cli.command()
-@click.argument('job_json', required=False) # MAKE ARGUMENT OPTIONAL
+@click.argument('job_json', required=False) 
 def enqueue(job_json):
     """
     Adds a new job to the queue.
@@ -59,8 +56,8 @@ def enqueue(job_json):
         
         # Check if the stripped string is empty before attempting loads
         if not job_json:
-             click.echo("Error: Empty job data provided.", err=True)
-             return
+            click.echo("Error: Empty job data provided.", err=True)
+            return
 
         job_data = json.loads(job_json)
     except json.JSONDecodeError:
@@ -77,7 +74,7 @@ def enqueue(job_json):
         click.echo(f"Warning: No job ID provided, assigned ID: {job_data['id']}", err=True)
         
     if insert_job(job_data):
-        click.echo(f"✅ Job {job_data['id']} successfully enqueued.")
+        click.echo(f"Job {job_data['id']} successfully enqueued.")
     else:
         # Error message handled within insert_job (IntegrityError)
         pass
@@ -109,7 +106,7 @@ def set(key, value):
         return
 
     set_config(key, value)
-    click.echo(f"✅ Config updated: {key} = {value}")
+    click.echo(f"Config updated: {key} = {value}")
 
 @config.command()
 def show():
@@ -150,7 +147,7 @@ def start(count):
     with open(WORKER_PID_FILE, 'w') as f:
         f.write("\n".join(pids))
         
-    click.echo(f"✅ Started {len(workers)} worker(s). PIDs written to {WORKER_PID_FILE}")
+    click.echo(f"Started {len(workers)} worker(s). PIDs written to {WORKER_PID_FILE}")
     
     try:
         for p in workers:
@@ -232,9 +229,9 @@ def status():
 # ----------------- 6. List Jobs Command Implementation -----------------
 
 @cli.command()
-@click.pass_context # MUST add context to use ctx.forward/invoke later
+@click.pass_context # context to use ctx.forward/invoke later
 @click.option('--state', default='pending', help='State to filter jobs by.', type=str)
-def list(ctx, state): # MUST accept ctx as the first argument
+def list(ctx, state): 
     """List jobs by state (pending, processing, completed, dead, etc.)."""
     jobs = get_jobs_by_state(state)
     
@@ -249,13 +246,12 @@ def list(ctx, state): # MUST accept ctx as the first argument
     click.echo("-" * 100)
 
     for job in jobs:
-        # NOTE: Ensure updated_at is properly handled as datetime object for formatting
         attempts_str = f"{job['attempts']}/{job['max_retries']}"
         # We need to explicitly convert from ISO string to datetime object for strftime
         try:
-             updated_dt = datetime.fromisoformat(job['updated_at']).strftime('%Y-%m-%d %H:%M:%S')
+            updated_dt = datetime.fromisoformat(job['updated_at']).strftime('%Y-%m-%d %H:%M:%S')
         except ValueError:
-             updated_dt = job['updated_at'] # Fallback if format is wrong
+            updated_dt = job['updated_at'] # Fallback if format is wrong
 
         command_short = (job['command'][:40] + '...') if len(job['command']) > 40 else job['command']
         
@@ -270,13 +266,10 @@ def dlq():
     """Manages the Dead Letter Queue (DLQ)."""
     pass
 
-@dlq.command(name='list') # Need to name it 'list' as it's a sub-command
-@click.pass_context # MUST add context here
-def dlq_list(ctx): # MUST accept ctx as the argument
+@dlq.command(name='list') 
+@click.pass_context 
+def dlq_list(ctx):
     """View jobs in the Dead Letter Queue."""
-    # Correct way to invoke one command from another:
-    # ctx.invoke calls the function directly; ctx.forward calls the command group process.
-    # Since 'list' takes an option/argument, we use invoke.
     ctx.invoke(list, state='dead') # Use the function name (list) and pass kwargs
 
 @dlq.command()

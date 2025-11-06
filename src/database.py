@@ -3,15 +3,13 @@ import os
 from datetime import datetime
 import click
 
-# Path to the SQLite database file
-# It will be created in the project root directory
+# Path to the SQLite database file, It will be created in the project root directory
 DB_PATH = os.path.join(os.getcwd(), 'queuectl.db')
 
 def get_db_connection():
     """Returns a new connection to the SQLite database."""
-    # Connect to the DB file. It's created if it doesn't exist.
     conn = sqlite3.connect(DB_PATH)
-    # Allows accessing columns by name (e.g., row['id'])
+    
     conn.row_factory = sqlite3.Row 
     return conn
 
@@ -44,20 +42,18 @@ def init_db():
     """)
     
     # --- 3. Set Default Configuration ---
-    # Default values required by the assignment
     defaults = {
         'max_retries': '3', 
         'backoff_base': '2' # For delay = base ^ attempts seconds
     }
     
     for key, value in defaults.items():
-        # INSERT OR IGNORE prevents overwriting existing config values
         cursor.execute("INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)", (key, value))
     
     conn.commit()
     conn.close()
 
-# --- Placeholder CRUD Functions (To be expanded in later steps) ---
+# --- Placeholder CRUD Functions  ---
 
 def get_config(key):
     """Retrieves a configuration value by key."""
