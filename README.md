@@ -1,19 +1,19 @@
-# ⚙️ QueueCTL: A Persistent, CLI-Based Background Job Queue System (Python)
+# QueueCTL: A Persistent, CLI-Based Background Job Queue System (Python)
 
 **QueueCTL** is a minimal, production-grade background job queue system built in **Python**.  
 It reliably executes background shell commands using **concurrent workers**, **automatic retries** with exponential backoff, and **persistent storage** that survives restarts.
 
 ---
 
-## 🚀 Features
+## Features
 
-✅ Command-Line Interface built with **Python Click**  
-✅ **Persistent job storage** using SQLite (`queuectl.db`)  
-✅ **Concurrent worker execution** via Python’s Multiprocessing  
-✅ **Automatic retry** with configurable exponential backoff  
-✅ **Dead Letter Queue (DLQ)** for permanently failed jobs  
-✅ **Race-condition safety** through atomic job acquisition  
-✅ **Cross-platform input robustness** via STDIN-based JSON input  
+ Command-Line Interface built with **Python Click**  
+ **Persistent job storage** using SQLite (`queuectl.db`)  
+ **Concurrent worker execution** via Python’s Multiprocessing  
+ **Automatic retry** with configurable exponential backoff  
+ **Dead Letter Queue (DLQ)** for permanently failed jobs  
+ **Race-condition safety** through atomic job acquisition  
+ **Cross-platform input robustness** via STDIN-based JSON input  
 
 ---
 
@@ -39,7 +39,7 @@ It reliably executes background shell commands using **concurrent workers**, **a
 - A minor `time.sleep(0.05)` ensures **database writes are fully committed** before other workers attempt job acquisition, preventing duplicate execution.  
 - Job states and configuration are stored in **SQLite**, providing **data persistence** across application restarts.
 
-### 🕓 Job Lifecycle & Backoff Logic
+### Job Lifecycle & Backoff Logic
 
 Jobs follow this lifecycle:  
 `pending → processing → completed / failed / dead`
@@ -53,7 +53,7 @@ Jobs follow this lifecycle:
 | **completed**      | Command succeeds | — |
 
 
-### 🧾 Usage Instructions
+### Usage Instructions
 
 Use STDIN for enqueuing JSON jobs to avoid shell quoting issues across platforms.
 
@@ -64,7 +64,7 @@ Start       Worker(s)	python -m src.cli worker start --count 2
 View        DLQ Jobs	python -m src.cli dlq list
 Retry       DLQ Job	    python -m src.cli dlq retry <job-id>
 
-## 🧪 Validation & Demo Scenarios
+## Validation & Demo Scenarios
 
 To demonstrate QueueCTL’s functionality, open two terminals:
 
@@ -74,7 +74,7 @@ CMD B → for managing jobs
 
 Below are three core scenarios that showcase the system’s capabilities.
 
-## ▶️ Scenario 1: Basic Job Completion
+## Scenario 1: Basic Job Completion
 
 Purpose:
 Demonstrate successful job processing and transition from pending → completed.
@@ -97,7 +97,7 @@ Job S1-success transitions from pending → processing → completed.
 
 Worker logs show successful job execution.
 
-## ⚠️ Scenario 2: Retry, Exponential Backoff, and DLQ
+## Scenario 2: Retry, Exponential Backoff, and DLQ
 
 Purpose:
 Show how failed jobs retry automatically using exponential backoff and move to DLQ when retries exceed the limit.
@@ -126,7 +126,7 @@ After final failure, job appears in DLQ via python -m src.cli dlq list.
 
 Retrying DLQ job re-enqueues it successfully.
 
-## ⚙️ Scenario 3: Concurrency Safety & Parallel Execution
+## Scenario 3: Concurrency Safety & Parallel Execution
 
 Purpose:
 Prove multiple workers can process different jobs concurrently without duplicate acquisition.
@@ -149,9 +149,9 @@ No duplicate job execution or missed state updates.
 
 Status shows both jobs moving independently from processing → completed.
 
-### 💻 Setup Instructions
+### Setup Instructions
 
-### 🧩 Technologies Used
+### Technologies Used
 - **Python 3.10+**
 - **Click** — Command-line interface
 - **SQLite3** — Job persistence
@@ -159,7 +159,7 @@ Status shows both jobs moving independently from processing → completed.
 
 ---
 
-### ⚙️ Installation Steps
+### Installation Steps
 
 ```bash
 # Clone the repository
